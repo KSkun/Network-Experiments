@@ -14,6 +14,8 @@ DWORD WINAPI SendMessageThread(LPVOID param);
 DWORD WINAPI ReceiveMessageThread(LPVOID param);
 
 int main(int argc, char *argv[]) {
+    setbuf(stdout, NULL);
+    setbuf(stderr, NULL);
     // added by wliu, for windows socket programming
     WSADATA WSAData;
     int WSAreturn;
@@ -110,7 +112,7 @@ DWORD WINAPI ReceiveMessageThread(LPVOID param) {
     char buf[MAX_LINE];
     int len;
     SOCKET s = *((SOCKET *) param);
-    while ((len = recv(s, buf, sizeof(buf), 0)) != SOCKET_ERROR) {
+    while ((len = recv(s, buf, sizeof(buf), 0)) != SOCKET_ERROR && len != 0) {
         printf("[server] %s\n", buf);
     }
     return 0;

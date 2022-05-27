@@ -9,11 +9,15 @@
 #define MAX_PENDING 5
 #define MAX_LINE 256
 
+SOCKET nowSock;
+
 DWORD WINAPI SendMessageThread(LPVOID param);
 
 DWORD WINAPI ReceiveMessageThread(LPVOID param);
 
 int main() {
+    setbuf(stdout, NULL);
+    setbuf(stderr, NULL);
     // added by wliu, for windows socket programming
     WSADATA WSAData;
     int WSAreturn;
@@ -58,6 +62,9 @@ int main() {
 
     listen(s, MAX_PENDING);
 
+    HANDLE threadSend = CreateThread(NULL, 0, SendMessageThread,
+                                     NULL, 0, NULL);
+
     /* wait for connection, then receive and print text */
     while (1) {
         // added by wliu, correction
@@ -68,28 +75,18 @@ int main() {
             exit(1);
         }
         fprintf(stderr, "received a connection from %s : \n", inet_ntoa(remote.sin_addr));
+        nowSock = new_s;
 
-        HANDLE threads[2];
-        DWORD threadIDs[2];
-        threads[0] = CreateThread(NULL,
-                                  0,
-                                  SendMessageThread,
-                                  &new_s,
-                                  0,
-                                  &threadIDs[0]);
-        threads[1] = CreateThread(NULL,
-                                  0,
-                                  ReceiveMessageThread,
-                                  &new_s,
-                                  0,
-                                  &threadIDs[1]);
-        WaitForSingleObject(threads[1], INFINITE);
-        TerminateThread(threads[0], 0);
-        CloseHandle(threads[0]);
-        CloseHandle(threads[1]);
+        HANDLE threadRecv = CreateThread(NULL, 0, ReceiveMessageThread,
+                                         NULL, 0, NULL);
+        WaitForSingleObject(threadRecv, INFINITE);
+        CloseHandle(threadRecv);
 
-        closesocket(new_s);
+        closesocket(nowSock);
     }
+
+    TerminateThread(threadSend, 0);
+    CloseHandle(threadSend);
 
     // added by wliu, for windows socket programming
     WSACleanup();
@@ -99,11 +96,13 @@ int main() {
 DWORD WINAPI SendMessageThread(LPVOID param) {
     char buf[MAX_LINE];
     int len;
-    SOCKET s = *((SOCKET *) param);
     while (fgets(buf, sizeof(buf), stdin)) {
         buf[MAX_LINE - 1] = '\0';
         len = strlen(buf) + 1;
-        send(s, buf, len, 0);
+        if (send(nowSock, buf, len, 0) == SOCKET_ERROR) {
+            fprintf(stderr, "send failed\n");
+            continue;
+        }
         fprintf(stderr, "send %d characters to client\n", len);
         printf("[server] %s\n", buf);
     }
@@ -113,8 +112,7 @@ DWORD WINAPI SendMessageThread(LPVOID param) {
 DWORD WINAPI ReceiveMessageThread(LPVOID param) {
     char buf[MAX_LINE];
     int len;
-    SOCKET s = *((SOCKET *) param);
-    while ((len = recv(s, buf, sizeof(buf), 0)) != SOCKET_ERROR) {
+    while ((len = recv(nowSock, buf, sizeof(buf), 0)) != SOCKET_ERROR && len != 0) {
         printf("[client] %s\n", buf);
     }
     return 0;
